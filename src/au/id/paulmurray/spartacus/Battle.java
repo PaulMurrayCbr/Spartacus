@@ -17,7 +17,234 @@ public final class Battle {
 
 	private void go() {
 		// caclulate_base_probs(); // only need to do this once :)
+		
+		// this will recursively entangle all the possible states
+		State.state(StateKey.sk(AD.ad(MAXDICE, MAXDICE), AD.ad(MAXDICE, MAXDICE))).calculate(0);
 
+	}
+
+	static final class StateKey {
+		final int state;
+
+		public String toString() {
+			return "[" + ((state >> 24) & 255) + "/" + ((state >> 16) & 255) + " vs. " + ((state >> 8) & 255) + "/"
+					+ ((state >> 0) & 255) + "]";
+		}
+
+		static StateKey[] skv = new StateKey[MAXDICE1 * MAXDICE1 * MAXDICE1 * MAXDICE1];
+
+		static {
+			for (int aa = 0; aa <= MAXDICE; aa++)
+				for (int ad = 0; ad <= MAXDICE; ad++) {
+					AD a = AD.ad(aa, ad);
+					for (int da = 0; da <= MAXDICE; da++)
+						for (int dd = 0; dd <= MAXDICE; dd++) {
+							AD d = AD.ad(da, dd);
+							skv[aa * MAXDICE1 * MAXDICE1 * MAXDICE1 //
+									+ ad * MAXDICE1 * MAXDICE1 //
+									+ da * MAXDICE1 //
+									+ dd] = new StateKey(a, d);
+						}
+				}
+		}
+
+		static StateKey sk(AD a, AD d) {
+			return skv[a.a * MAXDICE1 * MAXDICE1 * MAXDICE1 //
+					+ a.d * MAXDICE1 * MAXDICE1 //
+					+ d.a * MAXDICE1 //
+					+ d.d];
+		}
+
+		// an important sanity check
+		int getTotalDice() {
+			return ((state >> 24) & 255) + ((state >> 16) & 255) + ((state >> 8) & 255) + ((state >> 0) & 255);
+
+		}
+
+		AD getAttacker() {
+			return AD.ad((state >> 24) & 255, (state >> 16) & 255);
+		}
+
+		AD getDefender() {
+			return AD.ad((state >> 8) & 255, (state >> 0) & 255);
+		}
+
+		StateKey(AD attacker, AD defender) {
+			state = attacker.a << 24 | attacker.d << 16 | defender.a << 8 | defender.d;
+		}
+
+		StateKey invert() {
+			return sk(getDefender(), getAttacker());
+		}
+
+		public int hashCode() {
+			return state;
+		}
+
+		public boolean equals(Object o) {
+			return (o == this) || (o instanceof StateKey && hashCode() == o.hashCode());
+		}
+	}
+
+	static final class State {
+		final StateKey sk;
+
+		// probability of a win
+		double winProb;
+		boolean iscomputed = false; // we have yet to calculate what to do
+
+		// what you should do if you get 0,1,2 hits etc.
+		// null means you lose
+		State[] onHits = new State[MAXDICE1];
+
+		static Map<StateKey, State> states = new HashMap<StateKey, State>();
+
+		static {
+			for (int aa = 0; aa <= MAXDICE; aa++)
+				for (int ad = 0; ad <= MAXDICE; ad++) {
+					AD a = AD.ad(aa, ad);
+					for (int da = 0; da <= MAXDICE; da++)
+						for (int dd = 0; dd <= MAXDICE; dd++) {
+							AD d = AD.ad(da, dd);
+							StateKey k = StateKey.sk(a, d);
+							states.put(k, new State(k));
+						}
+				}
+
+		}
+
+		State(StateKey sk) {
+			super();
+			this.sk = sk;
+		}
+
+		static State state(StateKey k) {
+			return states.get(k);
+		}
+
+		AD getSituation() {
+			return AD.ad(sk.getAttacker().a, sk.getDefender().d);
+		}
+
+		void calculate(int depth) {
+			if (iscomputed)
+				return;
+
+			// our inverse is computed iff this thing is computed. We do them as
+			// pairs.
+
+			State inv = State.state(sk.invert());
+			
+			workOutWhatToDo(depth);
+			inv.workOutWhatToDo(depth);
+
+			// now, having worked out what to do given all the possible hits, we
+			// need to calculate the winProb of
+			// this state and its mirror. They are worked out in pairs because
+			// of the markov chain that we get
+			// when (potentially) the states bat back and forth scoring zero
+			// hits
+
+			double[] probs = baseProbs.get(sk);
+			double[] invProbs = baseProbs.get(inv.sk);
+			
+			// ok. the nubers I need are:
+			
+			double chanceOfThisToInv = probs[0];
+			double chanceOfInvToThis = invProbs[0];
+			
+			double chanceOfThisToWinGivenNotLoop = 0;
+			for(int i = 1; i<=MAXDICE; i++) {
+				if(probs[i] != 0 && onHits[i] != null) {
+					chanceOfThisToWinGivenNotLoop += probs[i] * (1-onHits[i].winProb);
+				}
+			}
+			
+			// this will fail if chanceOfThisToInv is 1, but this can only happen when the attacker has no attack dice
+			// this is never alloed to happen
+			chanceOfThisToWinGivenNotLoop /= (1-chanceOfThisToInv);
+			
+			double chanceOfInvToLoseGivenNotLoop = 0;
+			for(int i = 1; i<=MAXDICE; i++) {
+				if(invProbs[i] != 0 && inv.onHits[i] != null) {
+					chanceOfInvToLoseGivenNotLoop += invProbs[i] * inv.onHits[i].winProb;
+				}
+			}
+			
+			// this will fail if chanceOfInvToThis is 1, but this can only happen when the attacker has no attack dice
+			// this is never alloed to happen
+			chanceOfInvToLoseGivenNotLoop /= (1-chanceOfInvToThis);
+			
+			// ok, now I have the numbers I need to compute the chance to win for myself and for inv.
+			// I think it shoudl just be a pair of linear equations with two unknowns
+			
+			
+			
+			// TODO
+			
+			
+
+			// finally, mark this state as comouted
+
+			iscomputed = true;
+			inv.iscomputed = true;
+		}
+
+		void workOutWhatToDo(int depth) {
+			// just to keep things happy, I'll calculate this even for
+			// an impossible number of hits
+			for (int i = 0; i <= MAXDICE; i++) {
+				workOutWhatToDo(i, depth);
+			}
+		}
+
+		void workOutWhatToDo(int nHits, int depth) {
+			for (int i = 0; i < depth; i++)
+				System.out.print("  ");
+			System.out.println("What do we do in  state " + sk + " total dice " + sk.getTotalDice() + " when the defender gets " + nHits + " hits?");
+			// for zero hits, we move to our mirror state.
+			if (nHits == 0) {
+				onHits[nHits] = State.state(sk.invert());
+			}
+			// if the amount of hits leaves us losing, then onHits gets put to
+			// null
+			else if (nHits > sk.getDefender().a + sk.getDefender().d - 2) {
+				onHits[nHits] = null;
+			} else {
+				// ok. iterate through the possible ways of allocating attack
+				// and defence dice.
+				// for each, get the win probability for the inverse situation.
+				// find the *LOWEST*, and select that one as the what to do.
+
+				AD defender = sk.getDefender();
+				AD attacker = sk.getAttacker();
+
+				for (int removeFromAttack = 0; removeFromAttack <= nHits; removeFromAttack++) {
+					int removeFromDefence = nHits - removeFromAttack;
+
+					if (defender.a - removeFromAttack < 1)
+						break;
+					if (defender.d - removeFromDefence < 1)
+						break;
+
+					AD newDefender = AD.ad(defender.a - removeFromAttack, defender.d - removeFromDefence);
+
+					State invertedNewState = State.state(StateKey.sk(newDefender, attacker));
+
+					invertedNewState.calculate(depth + 1); // recursive call.
+
+					if (onHits[nHits] == null) {
+						// first cab off the rank;
+						onHits[nHits] = invertedNewState;
+					} else {
+						if (invertedNewState.winProb < onHits[nHits].winProb) {
+							onHits[nHits] = invertedNewState;
+						}
+					}
+				}
+			}
+
+		}
 	}
 
 	// simple key for attack.defense
@@ -35,8 +262,11 @@ public final class Battle {
 			return adv[a * MAXDICE1 + d];
 		}
 
-		public AD(int a, int d) {
+		AD(int a, int d) {
 			super();
+			if(a < 0 || a > MAXDICE || d < 0 || d > MAXDICE) {
+				throw new IllegalArgumentException("AD("+a+","+d+")");
+			}
 			this.a = a;
 			this.d = d;
 		}
@@ -52,9 +282,9 @@ public final class Battle {
 
 	// given a attack and d defence dice, what are the probablilities of getting
 	// 0, 1, 2, ... MAXDICE hits?
-	Map<AD, double[]> baseProbs = new HashMap<Battle.AD, double[]>();
+	static Map<AD, double[]> baseProbs = new HashMap<Battle.AD, double[]>();
 
-	{
+	static {
 		baseProbs.put(AD.ad(0, 0), new double[] { 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 });
 		baseProbs.put(AD.ad(0, 1), new double[] { 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 });
 		baseProbs.put(AD.ad(0, 2), new double[] { 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 });
