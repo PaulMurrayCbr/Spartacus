@@ -21,6 +21,12 @@ public final class Battle {
 		// this will recursively entangle all the possible states
 		State.state(StateKey.sk(AD.ad(MAXDICE, MAXDICE), AD.ad(MAXDICE, MAXDICE))).calculate(0);
 
+		// and now it is time to theorem test!
+
+		// first possible rule: when you take hits, first reduce your defence to
+		// no less than your
+		// attacker's attack dice. Then start removing attack dice.
+
 	}
 
 	static final class StateKey {
@@ -235,7 +241,13 @@ public final class Battle {
 					// System.out.println(sk + ", " + nHits +
 					// " hits: YOU LOSE! ");
 				} else {
-					System.out.println(sk + ", " + nHits + " hits, take "
+					
+					// TODO: the output from here is indicating that something is seriously wrong.
+					// it's giving me *higher* win probabilities when you ate *more* hits. I have screwed up
+					// a condition, somewhere.
+					System.out.println(sk + ", " + nHits + " hits, winprob "
+							+ (double) (int) (1000 * (1 - onHits[nHits].winProb)) / 10.0 + ". Take "
+
 							+ (defender.a - onHits[nHits].sk.getAttacker().a) + " off attack, "
 							+ (defender.d - onHits[nHits].sk.getAttacker().d) + " off defence, go to state "
 							+ onHits[nHits].sk);
