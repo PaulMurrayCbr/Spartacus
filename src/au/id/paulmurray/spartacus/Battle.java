@@ -17,7 +17,7 @@ public final class Battle {
 
 	private void go() {
 		// caclulate_base_probs(); // only need to do this once :)
-		
+
 		// this will recursively entangle all the possible states
 		State.state(StateKey.sk(AD.ad(MAXDICE, MAXDICE), AD.ad(MAXDICE, MAXDICE))).calculate(0);
 
@@ -134,7 +134,7 @@ public final class Battle {
 			// pairs.
 
 			State inv = State.state(sk.invert());
-			
+
 			workOutWhatToDo(depth);
 			inv.workOutWhatToDo(depth);
 
@@ -145,44 +145,37 @@ public final class Battle {
 			// when (potentially) the states bat back and forth scoring zero
 			// hits
 
-			double[] probs = baseProbs.get(sk);
-			double[] invProbs = baseProbs.get(inv.sk);
-			
+			double[] probs = baseProbs.get(AD.ad(sk.getAttacker().a, sk.getDefender().d));
+			double[] invProbs = baseProbs.get(AD.ad(sk.getDefender().a, sk.getAttacker().d));
+
 			// ok. the nubers I need are:
-			
-			double chanceOfThisToInv = probs[0];
-			double chanceOfInvToThis = invProbs[0];
-			
-			double chanceOfThisToWinGivenNotLoop = 0;
-			for(int i = 1; i<=MAXDICE; i++) {
-				if(probs[i] != 0 && onHits[i] != null) {
-					chanceOfThisToWinGivenNotLoop += probs[i] * (1-onHits[i].winProb);
+
+			double this2InvP = probs[0];
+			double inv2ThisP = invProbs[0];
+
+			double simpleWinP = 0;
+			for (int i = 1; i <= MAXDICE; i++) {
+				if (probs[i] != 0 && onHits[i] != null) {
+					simpleWinP += probs[i] * (1 - onHits[i].winProb);
 				}
 			}
-			
-			// this will fail if chanceOfThisToInv is 1, but this can only happen when the attacker has no attack dice
-			// this is never alloed to happen
-			chanceOfThisToWinGivenNotLoop /= (1-chanceOfThisToInv);
-			
-			double chanceOfInvToLoseGivenNotLoop = 0;
-			for(int i = 1; i<=MAXDICE; i++) {
-				if(invProbs[i] != 0 && inv.onHits[i] != null) {
-					chanceOfInvToLoseGivenNotLoop += invProbs[i] * inv.onHits[i].winProb;
+
+			double simpleInvLoseP = 0;
+			for (int i = 1; i <= MAXDICE; i++) {
+				if (invProbs[i] != 0 && inv.onHits[i] != null) {
+					simpleInvLoseP += invProbs[i] * inv.onHits[i].winProb;
 				}
 			}
-			
-			// this will fail if chanceOfInvToThis is 1, but this can only happen when the attacker has no attack dice
-			// this is never alloed to happen
-			chanceOfInvToLoseGivenNotLoop /= (1-chanceOfInvToThis);
-			
-			// ok, now I have the numbers I need to compute the chance to win for myself and for inv.
-			// I think it shoudl just be a pair of linear equations with two unknowns
-			
-			
-			
-			// TODO
-			
-			
+
+			// Right! After much blogging at
+			// https://paulmurray.wordpress.com/2015/07/06/spartacus-3/
+			// I belive this to be the correct pair of equations
+
+			double winP = (this2InvP * simpleInvLoseP + simpleWinP) / (1 - inv2ThisP * this2InvP);
+			double invLoseP = (simpleInvLoseP + inv2ThisP * simpleWinP) / (1 - inv2ThisP * this2InvP);
+
+			this.winProb = winP;
+			inv.winProb = 1 - invLoseP;
 
 			// finally, mark this state as comouted
 
@@ -199,18 +192,13 @@ public final class Battle {
 		}
 
 		void workOutWhatToDo(int nHits, int depth) {
-			for (int i = 0; i < depth; i++)
-				System.out.print("  ");
-			System.out.println("What do we do in  state " + sk + " total dice " + sk.getTotalDice() + " when the defender gets " + nHits + " hits?");
 			// for zero hits, we move to our mirror state.
 			if (nHits == 0) {
 				onHits[nHits] = State.state(sk.invert());
 			}
 			// if the amount of hits leaves us losing, then onHits gets put to
 			// null
-			else if (nHits > sk.getDefender().a + sk.getDefender().d - 2) {
-				onHits[nHits] = null;
-			} else {
+			else {
 				// ok. iterate through the possible ways of allocating attack
 				// and defence dice.
 				// for each, get the win probability for the inverse situation.
@@ -222,9 +210,9 @@ public final class Battle {
 				for (int removeFromAttack = 0; removeFromAttack <= nHits; removeFromAttack++) {
 					int removeFromDefence = nHits - removeFromAttack;
 
-					if (defender.a - removeFromAttack < 1)
+					if (removeFromAttack >= defender.a)
 						break;
-					if (defender.d - removeFromDefence < 1)
+					if (removeFromDefence >= defender.d)
 						break;
 
 					AD newDefender = AD.ad(defender.a - removeFromAttack, defender.d - removeFromDefence);
@@ -241,6 +229,16 @@ public final class Battle {
 							onHits[nHits] = invertedNewState;
 						}
 					}
+				}
+
+				if (onHits[nHits] == null) {
+					// System.out.println(sk + ", " + nHits +
+					// " hits: YOU LOSE! ");
+				} else {
+					System.out.println(sk + ", " + nHits + " hits, take "
+							+ (defender.a - onHits[nHits].sk.getAttacker().a) + " off attack, "
+							+ (defender.d - onHits[nHits].sk.getAttacker().d) + " off defence, go to state "
+							+ onHits[nHits].sk);
 				}
 			}
 
@@ -264,8 +262,8 @@ public final class Battle {
 
 		AD(int a, int d) {
 			super();
-			if(a < 0 || a > MAXDICE || d < 0 || d > MAXDICE) {
-				throw new IllegalArgumentException("AD("+a+","+d+")");
+			if (a < 0 || a > MAXDICE || d < 0 || d > MAXDICE) {
+				throw new IllegalArgumentException("AD(" + a + "," + d + ")");
 			}
 			this.a = a;
 			this.d = d;
