@@ -1,5 +1,6 @@
 package au.id.paulmurray.spartacus;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -7,6 +8,13 @@ import java.util.Map;
 public final class Battle {
 	public static final int MAXDICE = 6;
 	public static final int MAXDICE1 = MAXDICE + 1;
+
+	static void pp(int depth, Object s) {
+		while (depth-- > 0) {
+			System.out.print("  ");
+		}
+		System.out.println(s);
+	}
 
 	public Battle(String[] av) {
 	}
@@ -19,7 +27,9 @@ public final class Battle {
 		// caclulate_base_probs(); // only need to do this once :)
 
 		// this will recursively entangle all the possible states
-		State.state(StateKey.sk(AD.ad(MAXDICE, MAXDICE), AD.ad(MAXDICE, MAXDICE))).calculate(0);
+		// State.state(StateKey.sk(AD.ad(MAXDICE, MAXDICE), AD.ad(MAXDICE,
+		// MAXDICE))).calculate(0);
+		State.state(StateKey.sk(AD.ad(1, 1), AD.ad(2, 2))).calculate(0);
 
 		// and now it is time to theorem test!
 
@@ -33,8 +43,10 @@ public final class Battle {
 		final int state;
 
 		public String toString() {
-			return "[" + ((state >> 24) & 255) + "/" + ((state >> 16) & 255) + " vs. " + ((state >> 8) & 255) + "/"
-					+ ((state >> 0) & 255) + "]";
+			return "[A:" + ((state >> 24) & 255) + "/" + ((state >> 16) & 255) //
+					+ " vs. D:" + ((state >> 8) & 255) + "/" + ((state >> 0) & 255) //
+					+ " (" + getTotalDice() + ")" //
+					+ "]";
 		}
 
 		static StateKey[] skv = new StateKey[MAXDICE1 * MAXDICE1 * MAXDICE1 * MAXDICE1];
@@ -141,8 +153,12 @@ public final class Battle {
 
 			State inv = State.state(sk.invert());
 
+			pp(depth, "Calculate state for " + sk + " and " + inv.sk);
+			depth++;
 			workOutWhatToDo(depth);
-			inv.workOutWhatToDo(depth);
+			if (!sk.equals(inv.sk))
+				inv.workOutWhatToDo(depth);
+			depth--;
 
 			// now, having worked out what to do given all the possible hits, we
 			// need to calculate the winProb of
@@ -154,7 +170,7 @@ public final class Battle {
 			double[] probs = baseProbs.get(AD.ad(sk.getAttacker().a, sk.getDefender().d));
 			double[] invProbs = baseProbs.get(AD.ad(sk.getDefender().a, sk.getAttacker().d));
 
-			// ok. the nubers I need are:
+			// ok. the numbers I need are:
 
 			double this2InvP = probs[0];
 			double inv2ThisP = invProbs[0];
@@ -166,10 +182,10 @@ public final class Battle {
 				}
 			}
 
-			double simpleInvLoseP = 0;
+			double simpleInvWinP = 0;
 			for (int i = 1; i <= MAXDICE; i++) {
 				if (invProbs[i] != 0 && inv.onHits[i] != null) {
-					simpleInvLoseP += invProbs[i] * inv.onHits[i].winProb;
+					simpleInvWinP += invProbs[i] * (1 - inv.onHits[i].winProb);
 				}
 			}
 
@@ -177,13 +193,18 @@ public final class Battle {
 			// https://paulmurray.wordpress.com/2015/07/06/spartacus-3/
 			// I belive this to be the correct pair of equations
 
-			double winP = (this2InvP * simpleInvLoseP + simpleWinP) / (1 - inv2ThisP * this2InvP);
-			double invLoseP = (simpleInvLoseP + inv2ThisP * simpleWinP) / (1 - inv2ThisP * this2InvP);
+			double loopP = this2InvP * inv2ThisP;
+			double winP = (simpleWinP + this2InvP * (1 - simpleInvWinP) - loopP) / (1 - loopP);
+			double invWinP = (simpleInvWinP + (inv2ThisP * (1 - simpleWinP) - loopP)) / (1 - loopP);
 
 			this.winProb = winP;
-			inv.winProb = 1 - invLoseP;
+			inv.winProb = invWinP;
 
-			// finally, mark this state as comouted
+			pp(depth, sk + " D: winprob " + pct(winP));
+			if (!sk.equals(inv.sk))
+				pp(depth, inv.sk + " D: winprob " + pct(invWinP));
+
+			// finally, mark this state as computed
 
 			iscomputed = true;
 			inv.iscomputed = true;
@@ -217,9 +238,9 @@ public final class Battle {
 					int removeFromDefence = nHits - removeFromAttack;
 
 					if (removeFromAttack >= defender.a)
-						break;
+						continue;
 					if (removeFromDefence >= defender.d)
-						break;
+						continue;
 
 					AD newDefender = AD.ad(defender.a - removeFromAttack, defender.d - removeFromDefence);
 
@@ -241,16 +262,20 @@ public final class Battle {
 					// System.out.println(sk + ", " + nHits +
 					// " hits: YOU LOSE! ");
 				} else {
-					
-					// TODO: the output from here is indicating that something is seriously wrong.
-					// it's giving me *higher* win probabilities when you ate *more* hits. I have screwed up
-					// a condition, somewhere.
-					System.out.println(sk + ", " + nHits + " hits, winprob "
-							+ (double) (int) (1000 * (1 - onHits[nHits].winProb)) / 10.0 + ". Take "
 
-							+ (defender.a - onHits[nHits].sk.getAttacker().a) + " off attack, "
-							+ (defender.d - onHits[nHits].sk.getAttacker().d) + " off defence, go to state "
-							+ onHits[nHits].sk);
+					// TODO: the output from here is indicating that something
+					// is seriously wrong.
+					// it's giving me *higher* win probabilities when you ate
+					// *more* hits. I have screwed up
+					// a condition, somewhere.
+					int offAttack = (defender.a - onHits[nHits].sk.getAttacker().a);
+					int offDefense = (defender.d - onHits[nHits].sk.getAttacker().d);
+
+					pp(depth, sk + ", " + nHits + " hits. Take "//
+							+ (offAttack != 0 ? offAttack + " off attack, " : "")//
+							+ (offDefense != 0 ? offDefense + " off defence, " : "")//
+							+ "go to state " + onHits[nHits].sk.invert() + " invert for attack winprob: "//
+							+ pct(1 - onHits[nHits].winProb));
 				}
 			}
 
@@ -408,6 +433,7 @@ public final class Battle {
 								hitct++;
 							}
 						}
+
 						hits[hitct]++;
 					}
 
@@ -431,7 +457,7 @@ public final class Battle {
 		}
 	}
 
-	private void getperm(int n, int idx, int[] out) {
+	private static void getperm(int n, int idx, int[] out) {
 		Arrays.fill(out, 0);
 		for (int i = 0; i < n; i++) {
 			out[i] = (idx % 6) + 1;
@@ -443,14 +469,43 @@ public final class Battle {
 		Arrays.sort(out, 0, n);
 		for (int i = 0; i < n; i++)
 			out[i] *= -1;
-
 	}
 
-	private int nperms(int n) {
+	private static int nperms(int n) {
 		int p = 1;
 		while (n-- > 0)
 			p *= 6;
 		return p;
+	}
+
+	@SuppressWarnings("unused")
+	private static String showArray(int[] dice) {
+		StringBuilder bb = new StringBuilder();
+		bb.append('[');
+		for (int i = 0; i < dice.length; i++) {
+			if (i != 0)
+				bb.append(',');
+			bb.append(dice[i]);
+		}
+		bb.append(']');
+		return bb.toString();
+	}
+
+	private static Double pct(double x) {
+		return (int) (x * 1000) / 10.0;
+	}
+
+	@SuppressWarnings("unused")
+	private static String showArray(long[] dice) {
+		StringBuilder bb = new StringBuilder();
+		bb.append('[');
+		for (int i = 0; i < dice.length; i++) {
+			if (i != 0)
+				bb.append(',');
+			bb.append(dice[i]);
+		}
+		bb.append(']');
+		return bb.toString();
 	}
 
 }
