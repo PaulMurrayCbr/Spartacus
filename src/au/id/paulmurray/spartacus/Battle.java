@@ -1,5 +1,8 @@
 package au.id.paulmurray.spartacus;
 
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -27,7 +30,7 @@ public final class Battle {
 		new Battle(av).go();
 	}
 
-	private void go() {
+	private void go() throws FileNotFoundException {
 		// caclulate_base_probs(); // only need to do this once :)
 
 		// this will recursively entangle all the possible states
@@ -36,6 +39,62 @@ public final class Battle {
 		squelch_output = false;
 
 		findLocalMaxima();
+
+		dumpHtml1();
+	}
+
+	private void dumpHtml1() throws FileNotFoundException  {
+		PrintWriter pw = new PrintWriter(new FileOutputStream("html1.html"));
+		
+		final int PRINTDICE = MAXDICE;
+		
+		pw.println("<HTML><BODY><TABLE border='1' cellspacing='0' cellpadding='1'>");
+		pw.println("<TR><td></td><td></td>");
+		for(int i = 1;i<=PRINTDICE;i++) {
+			pw.println("<TD colspan='"+PRINTDICE+"'>da" + i + "</TD>");
+
+		}
+		pw.println("</TR>");
+		pw.println("<TR><td></td><td></td>");
+		for(int j = 1;j<=PRINTDICE;j++) {
+			for(int i = 1;i<=PRINTDICE;i++) {
+			pw.println("<TD>dd" + i + "</TD>");
+			}
+		}
+		pw.println("</TR>");
+		
+		for (int aa = 1; aa <= PRINTDICE; aa++) {
+			for (int ad = 1; ad <= PRINTDICE; ad++) {
+				pw.print("<TR>");
+				if(ad==1) { 
+					pw.print("<td rowspan='"+(PRINTDICE)+"'>aa" + aa + "</td>");
+				}
+				pw.print("<td>ad"+ad+"</td>");
+				for (int da = 1; da <= PRINTDICE; da++) {
+					for (int dd = 1; dd <= PRINTDICE; dd++) {
+						AD a = AD.ad(aa, ad);
+						AD d = AD.ad(da, dd);
+						StateKey sk = StateKey.sk(a, d);
+						pw.print("<TD>");
+						if(a.a<1 || d.a+d.d<=2) {
+							pw.print("-");
+						}else {
+						 if(d.a > State.state(sk).onHits[1].sk.invert().getDefender().a){
+							pw.print("<span style='color:white; background-color: red;'>A</span>");
+						}
+						 if(d.d > State.state(sk).onHits[1].sk.invert().getDefender().d){
+							pw.print("<span style='color:white; background-color: black;'>D</span>");
+						}
+						}
+						pw.print("</TD>");
+					}
+				}
+				pw.println("</TR>");
+			}
+		}
+		pw.println("</TABLE></BODY></HTML>");
+		pw.close();
+
 	}
 
 	private void findLocalMaxima() {
@@ -310,12 +369,6 @@ public final class Battle {
 					// System.out.println(sk + ", " + nHits +
 					// " hits: YOU LOSE! ");
 				} else {
-
-					// TODO: the output from here is indicating that something
-					// is seriously wrong.
-					// it's giving me *higher* win probabilities when you ate
-					// *more* hits. I have screwed up
-					// a condition, somewhere.
 					int offAttack = (defender.a - onHits[nHits].sk.getAttacker().a);
 					int offDefense = (defender.d - onHits[nHits].sk.getAttacker().d);
 
@@ -360,6 +413,10 @@ public final class Battle {
 
 		public boolean equals(Object o) {
 			return (o == this) || (o instanceof AD && hashCode() == o.hashCode());
+		}
+		
+		public String toString() {
+			return a + "/" + d;
 		}
 	}
 
