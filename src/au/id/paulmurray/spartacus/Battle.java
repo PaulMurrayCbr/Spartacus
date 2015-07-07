@@ -11,7 +11,7 @@ public final class Battle {
 
 	static void pp(int depth, Object s) {
 		while (depth-- > 0) {
-			System.out.print("  ");
+			System.out.print(" ");
 		}
 		System.out.println(s);
 	}
@@ -27,16 +27,44 @@ public final class Battle {
 		// caclulate_base_probs(); // only need to do this once :)
 
 		// this will recursively entangle all the possible states
-		// State.state(StateKey.sk(AD.ad(MAXDICE, MAXDICE), AD.ad(MAXDICE,
-		// MAXDICE))).calculate(0);
-		State.state(StateKey.sk(AD.ad(1, 1), AD.ad(2, 2))).calculate(0);
+		 State.state(StateKey.sk(AD.ad(MAXDICE, MAXDICE), AD.ad(MAXDICE,
+		 MAXDICE))).calculate(0);
 
 		// and now it is time to theorem test!
 
-		// first possible rule: when you take hits, first reduce your defence to
-		// no less than your
-		// attacker's attack dice. Then start removing attack dice.
-
+			for (int aa = 1; aa <= MAXDICE; aa++)
+				for (int ad = 1; ad <= MAXDICE; ad++) {
+					AD a = AD.ad(aa, ad);
+					for (int da = 1; da <= MAXDICE; da++)
+						for (int dd = 1; dd <= MAXDICE; dd++) {
+							AD d = AD.ad(da, dd);
+							if(d.a+d.d < 4) continue;
+							if(a.a < 2) continue;
+							StateKey sk = StateKey.sk(a, d);
+							State s = State.state(sk);
+							if(s.onHits[1] == null) {
+								throw new IllegalStateException(s.sk + " onhits[1] is null??");
+							}
+							
+							State oneHitSituation =  State.state(s.onHits[1].sk.invert());
+							for(int hits = 2; hits <= a.a; hits ++) {
+								if(d.a + d.d - hits < 2) continue;
+								
+								if(!s.onHits[hits].sk.invert().equals(oneHitSituation.onHits[hits-1].sk.invert()) ) {
+									System.out.println("\n FOUND LOCAL MINIMUM");
+									System.out.println("\nState: " + s.sk);
+									System.out.println("one-hit recommended situation: " + oneHitSituation.sk);
+									
+									System.out.println("on " + hits + " hits");
+									System.out.println("recommended situation (a): " + s.onHits[hits].sk.invert());
+									System.out.println("recommended situation (b): " + oneHitSituation.onHits[hits-1].sk.invert());
+									
+								}
+							}
+							
+						}
+				}
+		 
 	}
 
 	static final class StateKey {
